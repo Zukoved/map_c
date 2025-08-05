@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Caesar's Conquest Timeline</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Load Leaflet CSS from CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    /* Base styles for the map and controls */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #1e1e1e;
+      color: #eee;
+      font-family: sans-serif;
+    }
+    #map {
+      width: 100%;
+      height: 550px;
+    }
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      color: #eee;
+    }
+    input[type="range"] {
+      width: 250px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="slider-container">
+    <!-- Изменим подпись слайдера на русский язык -->
+    <label for="yearSlider">Дата (до н. э.): </label>
+    <input type="range" id="yearSlider" step="1">
+    <span id="yearLabel"></span>
+  </div>
+
+  <!-- Load Leaflet JS from CDN -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Define the chronological steps for the timeline.  The slider will move
+    // through these steps from earliest (index 0) to latest.  Each entry
+    // contains a human‑readable label for display in the UI.
+    // Обновлённая временная шкала с началом в 59 году до н. э. и разбивкой по месяцам
+    const dateSteps = [
+      { label: '59 г. до н. э.' },          // 0 – начало: ничего ещё не завоёвано
+      { label: 'Июнь 58 г. до н. э.' },     // 1 – победа над гельветами при Бибракте (лето 58 г.)
+      { label: 'Май 57 г. до н. э.' },      // 2 – битва при Аксонe (Axona)
+      { label: 'Июль 57 г. до н. э.' },     // 3 – битва при Сабисе (Sabis)
+      { label: 'Зима 57/56 г. до н. э.' },  // 4 – битва при Октодуре
+      { label: 'Август 55 г. до н. э.' },   // 5 – первая экспедиция в Британию (Portus Itius)
+      { label: 'Июль 54 г. до н. э.' },     // 6 – вторая экспедиция в Британию (Samarobriva)
+      { label: 'Начало 53 г. до н. э.' },   // 7 – рейды против нервиев, сенонов, менапиев и др.
+      { label: 'Февраль 52 г. до н. э.' },  // 8 – захват Ценабума
+      { label: 'Март–апрель 52 г. до н. э.' }, // 9 – осада Аварика
+      { label: 'Май 52 г. до н. э.' },      // 10 – осада Герговии и битва при Лютеции
+      { label: 'Июль 52 г. до н. э.' },     // 11 – начало осады Алезии
+      { label: 'Сентябрь 52 г. до н. э.' }, // 12 – штурм Алезии и капитуляция галлов
+      { label: 'Январь 47 г. до н. э.' },   // 13 – основание Вьенны как колонии
+      { label: 'Январь 43 г. до н. э.' }    // 14 – основание Лугдуна
+    ];
+
+    // Features with their acquisition and optional release indices.  The
+    // acquiredIndex corresponds to the earliest dateStep at which the
+    // settlement/tribe falls under Roman control.  The releaseIndex (if
+    // defined) indicates the last step during which it remains under
+    // control – afterwards it returns to its original colour.  If
+    // acquiredIndex is null, the feature never turns red.  If
+    // acquiredIndex is -1, the feature is already under control at the
+    // start of the timeline.
+    const features = [
+      { name: 'Menapii',   type: 'tribe',  coords: [3.8, 51.0],  acquiredIndex: 5, releaseIndex: null, label: "Menapii surrendered to Caesar's raids in early 53 BC." },
+      { name: 'Morini',    type: 'tribe',  coords: [1.8, 50.9],  acquiredIndex: 5, releaseIndex: null, label: "Morini surrendered with the Menapii when Caesar built causeways in early 53 BC." },
+      { name: 'Eburones',  type: 'tribe',  coords: [5.4, 50.7],  acquiredIndex: 5, releaseIndex: null, label: "Eburones under Ambiorix revolted in 54 BC; Caesar crushed them during his punitive raids early in 53 BC." },
+      { name: 'Atrebates', type: 'tribe',  coords: [2.8, 50.3],  acquiredIndex: 1, releaseIndex: null, label: "Atrebates allied with the Nervii and fought Caesar at the Battle of the Sabis in July 57 BC." },
+      { name: 'Bellovaci', type: 'tribe',  coords: [2.08,49.43], acquiredIndex: 0, releaseIndex: null, label: "Bellovaci submitted after Caesar defeated the Belgic coalition at the Axona in May 57 BC." },
+      { name: 'Helvetii',  type: 'tribe',  coords: [8.3, 47.0],  acquiredIndex: -1, releaseIndex: null, label: "Helvetii were defeated during the Helvetian migration in 58 BC (before our timeline begins)." },
+      { name: 'Sequani',   type: 'tribe',  coords: [6.02,47.24], acquiredIndex: null, releaseIndex: null, label: "Sequani were liberated from Ariovistus by Caesar but were Roman allies rather than subjects." },
+      { name: 'Aedui',     type: 'tribe',  coords: [4.40,46.927], acquiredIndex: null, releaseIndex: null, label: "The Aedui (Haedui) were Caesar's allies; they were not conquered." },
+      { name: 'Lingones',  type: 'tribe',  coords: [5.33,47.86], acquiredIndex: 5, releaseIndex: null, label: "Lingones provided winter quarters for Caesar’s legions after the 53 BC campaigns." },
+      { name: 'Parisii',   type: 'tribe',  coords: [2.35,48.853], acquiredIndex: 8, releaseIndex: null, label: "Parisii were defeated with their Senones allies at the Battle of Lutetia in May 52 BC." },
+      { name: 'Senones',   type: 'tribe',  coords: [3.3,48.2],  acquiredIndex: 5, releaseIndex: null, label: "Senones surrendered when Caesar raided them early in 53 BC; they rebelled again and were defeated at Lutetia in May 52 BC." },
+      { name: 'Remi',      type: 'tribe',  coords: [4.03,49.25], acquiredIndex: null, releaseIndex: null, label: "Remi provided intelligence to Caesar and remained loyal; they were not conquered." },
+      // Cities
+      { name: 'Lutetia',       type: 'city', coords: [2.35,48.853], acquiredIndex: 8, releaseIndex: null, label: "Battle of Lutetia – Labienus defeated the Parisii and Senones near modern Paris in May 52 BC." },
+      { name: 'Portus Itius',   type: 'city', coords: [1.69,50.93], acquiredIndex: 3, releaseIndex: null, label: "Portus Itius served as the departure point for Caesar’s first expedition to Britain in August 55 BC." },
+      { name: 'Samarobriva',   type: 'city', coords: [2.295,49.89], acquiredIndex: 4, releaseIndex: null, label: "Caesar used Samarobriva (Amiens) as a logistical base; it became notable during the second expedition to Britain in July 54 BC." },
+      { name: 'Lugdunum',     type: 'city', coords: [4.84,45.76], acquiredIndex: 12, releaseIndex: null, label: "Lugdunum (Lyon) was founded as a Roman colony in January 43 BC." },
+      { name: 'Geneva',       type: 'city', coords: [6.1432,46.2044], acquiredIndex: -1, releaseIndex: null, label: "Geneva’s bridge over the Rhône was held by Caesar in 58 BC before our timeline." },
+      { name: 'Octodur',      type: 'city', coords: [7.0724,46.1033], acquiredIndex: 2, releaseIndex: 3, label: "Galba’s legion won the Battle of Octodurus in the winter of 57/56 BC but withdrew shortly afterwards." },
+      { name: 'Vienna',       type: 'city', coords: [4.87,45.52], acquiredIndex: null, releaseIndex: null, label: "Vienne remained loyal to Rome; it became a Roman colony later but was not conquered during the Gallic War." },
+      { name: 'Gergovia',     type: 'city', coords: [3.127,45.734], acquiredIndex: 8, releaseIndex: 8, label: "Caesar’s assault on Gergovia in May 52 BC failed; the town remained in Gallic hands." },
+      { name: 'Bibracte',     type: 'city', coords: [4.022,46.931], acquiredIndex: -1, releaseIndex: null, label: "The battle of Bibracte (June/July 58 BC) took place near the Aeduan town; the settlement itself remained an ally." },
+      { name: 'Alesia',       type: 'city', coords: [4.4991,47.5447], acquiredIndex: 9, releaseIndex: null, label: "The siege of Alesia began in July 52 BC and ended in September 52 BC with a Roman victory." },
+      { name: 'Avaricum',     type: 'city', coords: [2.4,47.0833], acquiredIndex: 7, releaseIndex: null, label: "Caesar captured Avaricum after a long siege in March–April 52 BC." },
+      { name: 'Cenabum',      type: 'city', coords: [1.909,47.903], acquiredIndex: 6, releaseIndex: null, label: "Caesar seized and burned Cenabum early in the year 52 BC." },
+      { name: 'Bibrax',       type: 'city', coords: [3.23,49.48], acquiredIndex: 0, releaseIndex: null, label: "Bibrax (in Remi territory) was besieged by the Belgae and relieved by Caesar in May 57 BC." }
+    ];
+
+    // Применяем русские названия, описания и временные индексы для объектов.  
+    // Это позволяет не переписывать весь массив features вручную.
+    const translationMap = {
+      'Menapii':   { name: 'Менапии',   acquiredIndex: 7, label: 'Менапии сдались после рейдов Цезаря в начале 53\u00a0г. до\u00a0н.\u00a0э.' },
+      'Morini':    { name: 'Морини',    acquiredIndex: 7, label: 'Морини сдались вместе с менапиями, когда Цезарь построил дамбы в начале 53\u00a0г. до\u00a0н.\u00a0э.' },
+      'Eburones':  { name: 'Эбуроны',  acquiredIndex: 7, label: 'Эбуроны под предводительством Амбиорига подняли восстание в 54\u00a0г. до\u00a0н.\u00a0э.; Цезарь подавил их в начале 53\u00a0г. до\u00a0н.\u00a0э.' },
+      'Atrebates': { name: 'Атребаты', acquiredIndex: 3, label: 'Атребаты сражались с Цезарем у Сабиса в июле 57\u00a0г. до\u00a0н.\u00a0э.' },
+      'Bellovaci': { name: 'Белловаки', acquiredIndex: 2, label: 'Белловаки покорились после поражения белгов на Аксонe в мае 57\u00a0г. до\u00a0н.\u00a0э.' },
+      'Helvetii':  { name: 'Гельветы',  acquiredIndex: 1, label: 'Гельветы были разбиты в битве при Бибракте летом 58\u00a0г. до\u00a0н.\u00a0э.' },
+      'Sequani':   { name: 'Секваны',   acquiredIndex: null, label: 'Секваны были освобождены от Ариовиста Цезарем и оставались союзниками.' },
+      'Aedui':     { name: 'Эдуи',     acquiredIndex: null, label: 'Эдуи были союзниками Цезаря и сохраняли независимость.' },
+      'Lingones':  { name: 'Лингоны',  acquiredIndex: 7, label: 'Лингоны предоставили зимние квартиры для легионов Цезаря после походов 53\u00a0г.' },
+      'Parisii':   { name: 'Паризии',   acquiredIndex: 10, label: 'Паризии были разбиты Лабиеном у Лютеции в мае 52\u00a0г. до\u00a0н.\u00a0э.' },
+      'Senones':   { name: 'Сеноны',   acquiredIndex: 7, label: 'Сеноны сдались после рейдов Цезаря в начале 53\u00a0г. до\u00a0н.\u00a0э.; затем были разбиты у Лютеции.' },
+      'Remi':      { name: 'Ремы',      acquiredIndex: null, label: 'Ремы снабжали Цезаря разведданными и оставались верными союзниками.' },
+      'Lutetia':       { name: 'Лютеция',       acquiredIndex: 10, label: 'Лютеция – место победы Лабиена над паризиями и сенонами в мае 52\u00a0г. до\u00a0н.\u00a0э.' },
+      'Portus Itius':   { name: 'Порт Иций',   acquiredIndex: 5, label: 'Порт Иций – откуда Цезарь отплыл в Британию в августе 55\u00a0г. до\u00a0н.\u00a0э.' },
+      'Samarobriva':   { name: 'Самаробрива',   acquiredIndex: 6, label: 'Самаробрива (Амьен) служила базой для второй экспедиции в Британию в июле 54\u00a0г. до\u00a0н.\u00a0э.' },
+      'Lugdunum':     { name: 'Лугдунум',     acquiredIndex: 14, label: 'Лугдунум (Лион) основан как римская колония в январе 43\u00a0г. до\u00a0н.\u00a0э.' },
+      'Geneva':       { name: 'Женева',       acquiredIndex: 1, label: 'Женева и мост через Рону были заняты Цезарем весной 58\u00a0г. до\u00a0н.\u00a0э.' },
+      'Octodur':      { name: 'Октодур',      acquiredIndex: 4, releaseIndex: 5, label: 'Октодур – место зимней битвы 57/56\u00a0г. до\u00a0н.\u00a0э., после которой римляне отступили.' },
+      'Vienna':       { name: 'Виенна',       acquiredIndex: null, label: 'Виенна оставалась лояльной Риму и позднее стала колонией.' },
+      'Gergovia':     { name: 'Гергвия',     acquiredIndex: 10, releaseIndex: 10, label: 'Гергвия – здесь Цезарь потерпел поражение в мае 52\u00a0г. до\u00a0н.\u00a0э. и отступил.' },
+      'Bibracte':     { name: 'Бибракте',     acquiredIndex: null, label: 'Бибракте – столица эдуев, рядом с которой летом 58\u00a0г. до\u00a0н.\u00a0э. Цезарь разбил гельветов.' },
+      'Alesia':       { name: 'Алезия',       acquiredIndex: 11, label: 'Алезия – осада началась в июле и завершилась капитуляцией в сентябре 52\u00a0г. до\u00a0н.\u00a0э.' },
+      'Avaricum':     { name: 'Аварик',     acquiredIndex: 9, label: 'Аварик (Бурж) был взят Цезарем после осады в марте–апреле 52\u00a0г. до\u00a0н.\u00a0э.' },
+      'Cenabum':      { name: 'Ценабум',      acquiredIndex: 8, label: 'Ценабум (Орлеан) был захвачен и сожжён в феврале 52\u00a0г. до\u00a0н.\u00a0э.' },
+      'Bibrax':       { name: 'Бибракс',       acquiredIndex: 2, label: 'Бибракс в земле ремов осаждали белги; Цезарь снял осаду в мае 57\u00a0г. до\u00a0н.\u00a0э.' }
+    };
+    // Обновляем каждый объект features с учётом перевода и новых индексов
+    features.forEach(f => {
+      const t = translationMap[f.name];
+      if (t) {
+        if (t.name !== undefined) f.name = t.name;
+        if (t.acquiredIndex !== undefined) f.acquiredIndex = t.acquiredIndex;
+        if (t.releaseIndex !== undefined) f.releaseIndex = t.releaseIndex;
+        if (t.label !== undefined) f.label = t.label;
+      }
+    });
+
+    // Grab slider and label elements
+    const yearSlider = document.getElementById('yearSlider');
+    const yearLabel  = document.getElementById('yearLabel');
+    // Configure the slider to move through the indices of our dateSteps
+    yearSlider.min = 0;
+    yearSlider.max = dateSteps.length - 1;
+    yearSlider.step = 1;
+    // Start at the first step (earliest date in the timeline)
+    yearSlider.value = 0;
+    yearLabel.textContent = dateSteps[0].label;
+
+    // Initialize the map centered on Gaul
+    const map = L.map('map').setView([47.0, 3.5], 5);
+
+    // Base tile layer from OpenStreetMap (no API key required)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Create a layer group to hold our markers
+    const markersLayer = L.layerGroup().addTo(map);
+    // Create markers and attach acquisition/release indices and original colours
+    const markers = [];
+    features.forEach(f => {
+      const [lon, lat] = f.coords;
+      const isTribe = f.type === 'tribe';
+      const originalColor = isTribe ? '#EFBF00' : '#0074D9';
+      const marker = L.circleMarker([lat, lon], {
+        radius: 6,
+        fillColor: originalColor,
+        color: originalColor,
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8
+      });
+      marker.originalColor = originalColor;
+      marker.acquiredIndex = f.acquiredIndex;
+      marker.releaseIndex  = f.releaseIndex;
+      marker.bindTooltip(f.name);
+      marker.bindPopup(f.label);
+      marker.addTo(markersLayer);
+      markers.push(marker);
+    });
+
+    // Function to update marker colors based on selected year
+    function updateColors(step) {
+      markers.forEach(marker => {
+        // Determine whether the marker should be red on this step.  A
+        // marker turns red if it has an acquiredIndex defined and
+        // currentStep is >= acquiredIndex.  If it also has a releaseIndex
+        // defined, then it reverts to original colour after that step.
+        if (marker.acquiredIndex !== null && marker.acquiredIndex !== undefined) {
+          // If acquired before start (acquiredIndex == -1) treat as already red
+          const acquired = marker.acquiredIndex === -1 || step >= marker.acquiredIndex;
+          const released = marker.releaseIndex !== null && marker.releaseIndex !== undefined && step > marker.releaseIndex;
+          if (acquired && !released) {
+            marker.setStyle({ color: '#E34234', fillColor: '#E34234' });
+          } else {
+            marker.setStyle({ color: marker.originalColor, fillColor: marker.originalColor });
+          }
+        } else {
+          // Never conquered – always original colour
+          marker.setStyle({ color: marker.originalColor, fillColor: marker.originalColor });
+        }
+      });
+    }
+
+    // Initial colouring based on starting step
+    updateColors(0);
+
+    // Update colors whenever the slider moves
+    yearSlider.addEventListener('input', (e) => {
+      const step = parseInt(e.target.value);
+      // Update the label to the corresponding date string
+      yearLabel.textContent = dateSteps[step].label;
+      updateColors(step);
+    });
+  </script>
+</body>
+</html>
