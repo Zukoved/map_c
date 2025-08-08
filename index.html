@@ -62,7 +62,10 @@
 
     /* На мобильном стартуем со скрытым меню */
     @media (max-width: 768px) {
+      /* sidebar hidden by default on narrow screens */
       #app { grid-template-columns: 0 1fr; }
+      /* allow sidebar to appear when not collapsed */
+      #app:not(.collapsed) { grid-template-columns: 320px 1fr; }
     }
   </style>
 </head>
