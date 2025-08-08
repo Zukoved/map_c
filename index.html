@@ -50,7 +50,7 @@
 
     /* Ярлык для открытия меню, когда оно скрыто */
     #toggleTab {
-      position:fixed; left:8px; top:12px; z-index:1100;
+      position:fixed; left:8px; top:calc(var(--top-slider-space) + 12px); z-index:1100;
       padding:8px 10px; background:#222; color:var(--fg);
       border:1px solid var(--border); border-radius:999px; cursor:pointer;
       display:none; align-items:center; gap:6px; user-select:none;
