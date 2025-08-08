@@ -10,11 +10,17 @@
     :root{
       --bg:#111; --fg:#eaeaea; --muted:#9aa0a6; --accent:#4f46e5; --panel:#1b1b1b; --border:#2a2a2a;
       --red:#d93741; --yellow:#f0c419; --blue:#4aa3ff; --ally:#22c55e;
+      --top-slider-space: 0px; /* высота верхнего слайдера для отступа карты */
     }
     html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, sans-serif; }
+
+    /* Сетка приложения: 1) сайдбар 2) карта */
     #app { display:grid; grid-template-columns: 320px 1fr; height:100%; }
+    #app.collapsed { grid-template-columns: 0 1fr; } /* когда меню спрятано */
     #sidebar { background:var(--panel); border-right:1px solid var(--border); padding:14px; overflow:auto; }
     #map { width:100%; height:100%; }
+    body.has-top-slider #map { margin-top: var(--top-slider-space); height: calc(100% - var(--top-slider-space)); }
+
     h1 { font-size:18px; margin:0 0 8px; }
     .muted { color:var(--muted); font-size:12px; }
     .control { margin:14px 0; }
@@ -31,55 +37,100 @@
     details { border:1px solid var(--border); border-radius:10px; padding:8px 10px; background:#161616; }
     summary { cursor:pointer; }
     .small { font-size:12px; }
+
+    /* Верхний слайдер (показывается только при скрытом меню) */
+    #top-slider {
+      position:fixed; left:0; right:0; top:0; z-index:1000;
+      display:none;
+      background:#161616;
+      border-bottom:1px solid var(--border);
+      padding:8px 12px;
+    }
+    body.has-top-slider #top-slider { display:block; }
+
+    /* Ярлык для открытия меню, когда оно скрыто */
+    #toggleTab {
+      position:fixed; left:8px; top:12px; z-index:1100;
+      padding:8px 10px; background:#222; color:var(--fg);
+      border:1px solid var(--border); border-radius:999px; cursor:pointer;
+      display:none; align-items:center; gap:6px; user-select:none;
+    }
+    #toggleTab.show { display:flex; }
+
+    /* Чтобы кнопки Leaflet не перекрывали ярлык */
+    .leaflet-control-container { z-index: 500; }
+
+    /* На мобильном стартуем со скрытым меню */
+    @media (max-width: 768px) {
+      #app { grid-template-columns: 0 1fr; }
+    }
   </style>
 </head>
 <body>
-<div id="app">
-  <aside id="sidebar">
-    <h1>Завоевание Галлии Цезарем</h1>
-    <div class="muted">Все племена (жёлтые) и города (синие) видны всегда; по мере продвижения по времени объекты меняют цвет на красный при захвате, а при утрате контроля возвращаются к исходному цвету. Союзники подсвечиваются зелёным.</div>
 
-    <div class="control">
-      <div class="row" style="justify-content:space-between;">
-        <div class="muted">Диапазон: 59–50 гг. до н.э.</div>
-        <button id="play" class="btn" title="Воспроизвести/пауза">▶</button>
-      </div>
-      <!-- Лево (0) = янв 59 до н.э., право (119) = дек 50 до н.э. -->
-      <input id="time" type="range" min="0" max="119" step="1" value="0" />
-      <div id="dateLabel" class="row" style="justify-content:space-between;">
-        <div>Дата:</div><strong id="dateOut">янв 59 до н.э.</strong>
-      </div>
+  <!-- Верхняя панель со слайдером (активна только при скрытом меню) -->
+  <div id="top-slider">
+    <div class="row" style="justify-content:space-between; margin-bottom:6px;">
+      <div class="muted">Временная шкала (59–50 до н.э.)</div>
+      <strong id="dateOutTop">янв 59 до н.э.</strong>
     </div>
+    <!-- Лево (0) = янв 59 до н.э., право (119) = дек 50 до н.э. -->
+    <input id="timeTop" type="range" min="0" max="119" step="1" value="0" />
+  </div>
 
-    <details open>
-      <summary>Легенда</summary>
-      <div class="legend">
-        <div class="dot tribe"></div><div>Племя (область)</div>
-        <div class="dot city"></div><div>Город (точка)</div>
-        <div class="dot conq"></div><div>Захвачено Римом</div>
-        <div class="dot ally"></div><div>Союзник Рима</div>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="row" style="justify-content:space-between; align-items:flex-start;">
+        <h1>Завоевание Галлии Цезарем</h1>
+        <button id="collapseBtn" class="btn" title="Свернуть меню">⟨⟨</button>
       </div>
-    </details>
+      <div class="muted">Все племена (жёлтые) и города (синие) видны всегда; по мере продвижения по времени объекты меняют цвет на красный при захвате, а при утрате контроля возвращаются к исходному цвету. Союзники подсвечиваются зелёным.</div>
 
-    <details style="margin-top:10px;">
-      <summary>Фильтры</summary>
-      <div class="control small">
-        <label><input type="checkbox" id="showTribeAreas" checked> Контуры племён (полигоны)</label><br/>
-        <label><input type="checkbox" id="showTribePoints"> Племена (точки)</label><br/>
-        <label><input type="checkbox" id="showCities" checked> Показать города</label>
+      <div class="control">
+        <div class="row" style="justify-content:space-between;">
+          <div class="muted">Диапазон: 59–50 гг. до н.э.</div>
+          <button id="play" class="btn" title="Воспроизвести/пауза">▶</button>
+        </div>
+        <!-- Лево (0) = янв 59 до н.э., право (119) = дек 50 до н.э. -->
+        <input id="time" type="range" min="0" max="119" step="1" value="0" />
+        <div id="dateLabel" class="row" style="justify-content:space-between;">
+          <div>Дата:</div><strong id="dateOut">янв 59 до н.э.</strong>
+        </div>
       </div>
-    </details>
 
-    <details style="margin-top:10px;">
-      <summary>О проекте</summary>
-      <div class="small muted">
-        Даты и события могут содержать неточности и требуют дополнительной проверки. Контуры племён являются приблизительными.
-      </div>
-    </details>
+      <details open>
+        <summary>Легенда</summary>
+        <div class="legend">
+          <div class="dot tribe"></div><div>Племя (область)</div>
+          <div class="dot city"></div><div>Город (точка)</div>
+          <div class="dot conq"></div><div>Захвачено Римом</div>
+          <div class="dot ally"></div><div>Союзник Рима</div>
+        </div>
+      </details>
 
-  </aside>
-  <main id="map"></main>
-</div>
+      <details style="margin-top:10px;">
+        <summary>Фильтры</summary>
+        <div class="control small">
+          <label><input type="checkbox" id="showTribeAreas" checked> Контуры племён (полигоны)</label><br/>
+          <label><input type="checkbox" id="showTribePoints"> Племена (точки)</label><br/>
+          <label><input type="checkbox" id="showCities" checked> Показать города</label>
+        </div>
+      </details>
+
+      <details style="margin-top:10px;">
+        <summary>О проекте</summary>
+        <div class="small muted">
+          Даты и события могут содержать неточности и требуют дополнительной проверки. Контуры племён являются приблизительными.
+        </div>
+      </details>
+    </aside>
+
+    <main id="map"></main>
+  </div>
+
+  <!-- Ярлычок для открытия меню -->
+  <button id="toggleTab" title="Открыть меню">☰ Меню</button>
+
 <script>
 // ===== ВРЕМЕННАЯ ШКАЛА =====
 // Индекс 0 = янв 59 до н.э.; 119 = дек 50 до н.э. (слева → направо = вперёд по времени)
@@ -304,12 +355,16 @@ function applyStylesAt(index){
 
 // ===== UI =====
 const time = document.getElementById('time');
+const timeTop = document.getElementById('timeTop');
+const dateOutTop = document.getElementById('dateOutTop');
 const playBtn = document.getElementById('play');
 const showTribeAreas = document.getElementById('showTribeAreas');
 const showTribePoints = document.getElementById('showTribePoints');
 const showCities = document.getElementById('showCities');
 
-time.addEventListener('input', ()=> applyStylesAt(parseInt(time.value,10)));
+time.addEventListener('input', ()=> setTimeline(parseInt(time.value,10)));
+timeTop.addEventListener('input', ()=> setTimeline(parseInt(timeTop.value,10)));
+
 showTribeAreas.addEventListener('change', ()=> showTribeAreas.checked?map.addLayer(layerTribeAreas):map.removeLayer(layerTribeAreas));
 showTribePoints.addEventListener('change', ()=> showTribePoints.checked?map.addLayer(layerTribePoints):map.removeLayer(layerTribePoints));
 showCities.addEventListener('change', ()=> showCities.checked?map.addLayer(layerCities):map.removeLayer(layerCities));
@@ -318,14 +373,65 @@ let timer = null;
 function tick(){
   let v = parseInt(time.value,10);
   v = (v+1) % (parseInt(time.max,10)+1); // вперёд по времени
-  time.value = String(v);
-  applyStylesAt(v);
+  setTimeline(v);
 }
 playBtn.addEventListener('click', ()=>{
   if(timer){ clearInterval(timer); timer=null; playBtn.textContent='▶'; return; }
   playBtn.textContent='⏸';
   timer = setInterval(tick, 900);
 });
+
+// ===== СВЕРТЫВАЕМОЕ МЕНЮ + ВЕРХНИЙ СЛАЙДЕР =====
+const appEl = document.getElementById('app');
+const sidebar = document.getElementById('sidebar');
+const collapseBtn = document.getElementById('collapseBtn');
+const toggleTab = document.getElementById('toggleTab');
+const topSliderBar = document.getElementById('top-slider');
+
+function setTopSliderSpace(){
+  requestAnimationFrame(()=>{
+    const h = topSliderBar.offsetHeight || 0;
+    document.documentElement.style.setProperty('--top-slider-space', h + 'px');
+    // после изменения высоты — пересчитать размеры карты
+    setTimeout(()=> map.invalidateSize(), 60);
+  });
+}
+
+function collapseSidebar(yes){
+  if (yes){
+    appEl.classList.add('collapsed');
+    document.body.classList.add('has-top-slider');
+    toggleTab.classList.add('show');
+    setTopSliderSpace();
+  } else {
+    appEl.classList.remove('collapsed');
+    document.body.classList.remove('has-top-slider');
+    toggleTab.classList.remove('show');
+    document.documentElement.style.setProperty('--top-slider-space', '0px');
+    setTimeout(()=> map.invalidateSize(), 60);
+  }
+}
+
+toggleTab.addEventListener('click', ()=> collapseSidebar(false));
+collapseBtn.addEventListener('click', ()=> collapseSidebar(true));
+window.addEventListener('resize', setTopSliderSpace);
+
+// На мобильном стартуем со скрытым меню
+if (window.matchMedia('(max-width: 768px)').matches) {
+  collapseSidebar(true);
+} else {
+  collapseSidebar(false);
+}
+
+// ===== СИНХРОНИЗАЦИЯ ШКАЛЫ ВРЕМЕНИ =====
+function setTimeline(v){
+  v = Math.max(0, Math.min(119, Number(v)));
+  if (String(v) !== time.value) time.value = String(v);
+  if (String(v) !== timeTop.value) timeTop.value = String(v);
+  applyStylesAt(v); // обновляет основной label в сайдбаре
+  dateOutTop.textContent = idxToLabel(v);
+}
+window.updateTimeline = setTimeline; // хук на всякий
 
 // ===== САМОПРОВЕРКИ (тесты, результат в консоли) =====
 function assert(cond, msg){ if(cond) console.log('✓', msg); else console.error('✗', msg); }
@@ -336,17 +442,14 @@ function assert(cond, msg){ if(cond) console.log('✓', msg); else console.error
     const names = new Set(ENTITIES.map(e=>e.name));
     need.forEach(n=> assert([...names].some(x=>x.toLowerCase().includes(n.toLowerCase())), `Наличие объекта: ${n}`));
     assert(ENTITIES.every(e=>Array.isArray(e.events)), 'У всех объектов есть массив events');
-    // Проверка хронологии: -59 раньше -58 и т.д.
     assert(compareKeysChrono('-59-01','-58-01') < 0, 'Хронология BCE корректна (-59 раньше -58)');
     assert(compareKeysChrono('-58-05','-58-06') < 0, 'Месяцы возрастают внутри года');
-    // Проверка статусов: Гельветы до июня 58 не захвачены, после — захвачены
     const helv = ENTITIES.find(e=>/helvetii/i.test(e.name));
     assert(helv, 'Гельветы присутствуют');
     const s1 = statusAt(helv, '-58-05');
     const s2 = statusAt(helv, '-58-06');
     assert(s1.kind!=='conq', 'Гельветы до -58-06 не красные');
     assert(s2.kind==='conq', 'Гельветы на -58-06 и позже красные');
-    // Полигоны созданы
     assert(tribePolys.length >= ENTITIES.filter(e=>e.type==='tribe').length*0.9, 'Полигоны для племён созданы');
   } catch(err){ console.error('Ошибка тестов:', err); }
 })();
@@ -354,7 +457,7 @@ function assert(cond, msg){ if(cond) console.log('✓', msg); else console.error
 // Инициализация
 // По умолчанию племенные точки скрыты, контуры и города видны
 map.removeLayer(layerTribePoints);
-applyStylesAt(parseInt(time.value,10));
+setTimeline(parseInt(time.value,10));
 </script>
 </body>
 </html>
